@@ -107,6 +107,9 @@ class BudgetPDFGenerator:
         
         headers = ['Produto', 'Descrição', 'Cód.', 'Qtd', 'À Vista', 'Total a Prazo']
         table_data = [headers]
+        
+        # Lista para armazenar comandos extras de estilo (para o SPAN dos manuais)
+        extra_tbl_cmds = []
 
         for prod in products_slice:
             img_obj = self.fetch_image_for_table(prod.get("image_url"))
@@ -115,7 +118,12 @@ class BudgetPDFGenerator:
             safe_link = unicodedata.normalize("NFC", prod.get('link', ''))
             safe_cod = unicodedata.normalize("NFC", str(prod.get('cod', '') or ''))
             
-            desc_html = f"<b>{safe_name}</b><br/><font color='blue' size=7>{safe_link}</font>"
+            # Se tiver link, mostra em azul, senão (item manual) só o nome
+            if safe_link:
+                desc_html = f"<b>{safe_name}</b><br/><font color='blue' size=7>{safe_link}</font>"
+            else:
+                desc_html = f"<b>{safe_name}</b>"
+
             p_desc = Paragraph(desc_html, style_desc)
             
             try: qtd = int(prod.get("qty", 1))
@@ -152,12 +160,26 @@ class BudgetPDFGenerator:
                  v_prazo_calc = val_vista_total * 1.15
                  p_final = self.format_currency(v_prazo_calc)
             
-            table_data.append([img_obj if img_obj else "", p_desc, safe_cod, str(qtd), p_vista_str, p_final])
+            # LÓGICA DE MESCLAGEM (SPAN) PARA ITENS SEM FOTO (MANUAIS/SERVIÇOS)
+            # Verifica se não tem objeto de imagem E se a URL original é vazia/None
+            is_manual_or_service = (img_obj is None) and (not prod.get("image_url"))
+            
+            row_idx = len(table_data) # Índice da linha atual na tabela (considerando o header)
+
+            if is_manual_or_service:
+                # Se for manual: Coloca a descrição na Coluna 0 e deixa a Coluna 1 vazia
+                # O SPAN vai cobrir a Coluna 1
+                row = [p_desc, '', safe_cod, str(qtd), p_vista_str, p_final]
+                # Adiciona comando de mesclagem: Coluna 0 até Coluna 1 na linha atual
+                extra_tbl_cmds.append(('SPAN', (0, row_idx), (1, row_idx)))
+            else:
+                # Normal: Imagem na Col 0, Descrição na Col 1
+                row = [img_obj if img_obj else "", p_desc, safe_cod, str(qtd), p_vista_str, p_final]
+
+            table_data.append(row)
 
         # TOTAL GERAL (RODAPÉ DA TABELA)
         if page_type in ['SINGLE', 'LAST'] and totals:
-            # Aqui mantemos a lógica que você pediu antes:
-            # Mostra o TOTAL cheio e em baixo a simulação da parcela
             val_total_prazo = totals['prazo']
             val_parcela_mensal = val_total_prazo / 10
             
@@ -174,7 +196,7 @@ class BudgetPDFGenerator:
             ]
             table_data.append(row_total)
 
-        # Estilo
+        # Estilo Base
         last_row = len(table_data) - 1
         tbl_cmds = [
             ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
@@ -195,6 +217,9 @@ class BudgetPDFGenerator:
             ('TOPPADDING', (0,0), (-1,-1), 5),
             ('BOTTOMPADDING', (0,0), (-1,-1), 5),
         ]
+        
+        # Adiciona os comandos de SPAN dos itens manuais
+        tbl_cmds.extend(extra_tbl_cmds)
         
         if page_type in ['SINGLE', 'LAST'] and totals:
             tbl_cmds.append(('BACKGROUND', (3, last_row), (-1, last_row), colors.lightgrey))
@@ -367,6 +392,10 @@ def create_budgets_tab(parent_frame):
     
     btn_add_item = ttk.Button(left_panel, text="➡️ Adicionar Item", bootstyle="success")
     btn_add_item.pack(fill=X, pady=5)
+    
+    # NOVO BOTÃO PARA ITEM MANUAL/SERVIÇO
+    btn_add_manual = ttk.Button(left_panel, text="➕ Adicionar Serviço / Manual", bootstyle="warning")
+    btn_add_manual.pack(fill=X, pady=2)
 
     # DIREITA
     ttk.Label(right_panel, text="2. Montagem", font=("Segoe UI", 11, "bold")).pack(anchor='w')
@@ -506,6 +535,56 @@ def create_budgets_tab(parent_frame):
         current_budget_items.append(item)
         refresh_budget_tree()
 
+    # --- FUNÇÃO PARA ADICIONAR ITEM MANUAL ---
+    def add_manual_item():
+        # Cria um diálogo simples para os dados
+        d = ttk.Toplevel(page_frame)
+        d.title("Adicionar Item Manual / Serviço")
+        d.geometry("400x300")
+        
+        ttk.Label(d, text="Descrição / Serviço:").pack(pady=5)
+        e_name = ttk.Entry(d, width=40); e_name.pack()
+        e_name.focus_set()
+        
+        ttk.Label(d, text="Código (Opcional):").pack(pady=5)
+        e_cod = ttk.Entry(d, width=20); e_cod.pack()
+        
+        row_vals = ttk.Frame(d); row_vals.pack(pady=5)
+        ttk.Label(row_vals, text="Qtd:").pack(side=LEFT)
+        e_qtd = ttk.Entry(row_vals, width=5); e_qtd.pack(side=LEFT, padx=5)
+        e_qtd.insert(0, "1")
+        
+        ttk.Label(row_vals, text="Valor Unit. (R$):").pack(side=LEFT)
+        e_price = ttk.Entry(row_vals, width=15); e_price.pack(side=LEFT, padx=5)
+        
+        def confirm():
+            name = e_name.get().strip()
+            price = e_price.get().strip()
+            if not name or not price:
+                messagebox.showwarning("Atenção", "Preencha Nome e Valor")
+                return
+            
+            try: int(e_qtd.get())
+            except: 
+                messagebox.showwarning("Erro", "Quantidade inválida")
+                return
+
+            # Cria item manual. Link vazio e image_url None são importantes para o PDF detectar
+            item = {
+                "cod": e_cod.get().strip(),
+                "name": name,
+                "link": "",          # Sem link
+                "image_url": None,   # Sem imagem (Sinaliza mesclagem no PDF)
+                "qty": e_qtd.get(),
+                "price_cash": price,
+                "price_install": ""  # Deixa vazio para cálculo automático (15%) ou edita depois
+            }
+            current_budget_items.append(item)
+            refresh_budget_tree()
+            d.destroy()
+            
+        ttk.Button(d, text="Adicionar", command=confirm, bootstyle="success").pack(pady=20)
+
     def refresh_budget_tree():
         tree_budget.delete(*tree_budget.get_children())
         for index, item in enumerate(current_budget_items):
@@ -527,8 +606,8 @@ def create_budgets_tab(parent_frame):
         ev = ttk.Entry(top); ev.insert(0, item['price_cash']); ev.pack()
         ttk.Label(top, text="Prazo:").pack(pady=2)
         ep = ttk.Entry(top); ep.insert(0, item['price_install']); ep.pack()
-        ttk.Label(top, text="Img URL:").pack(pady=2)
-        ei = ttk.Entry(top); ei.insert(0, item['image_url']); ei.pack()
+        ttk.Label(top, text="Img URL (Vazio para Manual):").pack(pady=2)
+        ei = ttk.Entry(top); ei.insert(0, str(item['image_url']) if item['image_url'] else ""); ei.pack()
         
         def save():
             try:
@@ -536,7 +615,11 @@ def create_budgets_tab(parent_frame):
                 item['qty'] = int(eq.get())
                 item['price_cash'] = ev.get()
                 item['price_install'] = ep.get()
-                item['image_url'] = ei.get()
+                
+                # Trata imagem vazia
+                img_val = ei.get().strip()
+                item['image_url'] = img_val if img_val and img_val != 'None' else None
+                
                 refresh_budget_tree(); top.destroy()
             except: messagebox.showerror("Erro", "Qtd inválida")
         ttk.Button(top, text="Salvar", command=save, bootstyle="success").pack(pady=15)
@@ -573,6 +656,7 @@ def create_budgets_tab(parent_frame):
     btn_load_cache.config(command=load_data_from_system)
     btn_update_web.config(command=download_from_web)
     btn_add_item.config(command=add_item)
+    btn_add_manual.config(command=add_manual_item) # Configura novo botão
     btn_remove_item.config(command=lambda: [current_budget_items.pop(int(tree_budget.selection()[0])), refresh_budget_tree()] if tree_budget.selection() else None)
     tree_budget.bind("<Double-1>", edit_budget_item)
     btn_generate_pdf.config(command=execute_pdf_generation)

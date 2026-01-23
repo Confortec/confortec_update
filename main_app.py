@@ -7,7 +7,7 @@ from functools import partial
 from tkinter import BOTH, HORIZONTAL, LEFT, NONE, X, YES, messagebox, PhotoImage
 
 # --- CONFIGURAÇÃO DA VERSÃO ---
-APP_VERSION = "7.80"  
+APP_VERSION = "7.95"  
 
 # --- DEBUG BLINDADO ---
 def debug_print(msg):
@@ -76,7 +76,7 @@ def create_version_tab(parent):
     ttk.Label(center_frame, text=f"✅ VERSÃO {APP_VERSION} ATIVA", font=("Segoe UI", 32, "bold"), bootstyle="success").pack(pady=20)
     
     ttk.Label(center_frame, text="A atualização automática funcionou com sucesso!", font=("Segoe UI", 12)).pack(pady=5)
-    ttk.Label(center_frame, text="O Launcher baixou e instalou esta versão diretamente do Google Drive.", font=("Segoe UI", 10), bootstyle="secondary").pack(pady=20)
+    ttk.Label(center_frame, text="O Launcher baixou e instalou esta versão diretamente do GitHub.", font=("Segoe UI", 10), bootstyle="secondary").pack(pady=20)
     
     return frame
 
