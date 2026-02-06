@@ -1,7 +1,7 @@
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from tkinter import messagebox
-from database import get_db_connection
+from database import get_db_connection, remover_lead_por_telefone # Importada a nova função
 from datetime import datetime, date
 import pymysql
 
@@ -38,9 +38,13 @@ def create_purchases_tab(parent_frame):
     
     for i, (label_text, key) in enumerate(campos):
         ttk.Label(scrollable_frame, text=label_text, font=("Calibri", 10, "bold")).grid(row=i, column=0, sticky='w', pady=(8, 2))
-        if key == "grupo": entries[key] = ttk.Combobox(scrollable_frame, values=["AQUECEDORES", "AQUEC SOLAR", "ENERGIA SOLAR", "CURSOS", "OUTROS"], state="readonly")
-        elif key == "forma_pagamento": entries[key] = ttk.Combobox(scrollable_frame, values=["À Vista", "Parcelado", "Financiamento", "Cartão"], state="readonly")
-        else: entries[key] = ttk.Entry(scrollable_frame)
+        if key == "grupo": 
+            # Removido state="readonly" para permitir digitação de novos grupos
+            entries[key] = ttk.Combobox(scrollable_frame, values=["AQUECEDORES", "AQUEC SOLAR", "ENERGIA SOLAR", "CURSOS", "OUTROS"])
+        elif key == "forma_pagamento": 
+            entries[key] = ttk.Combobox(scrollable_frame, values=["À Vista", "Parcelado", "Financiamento", "Cartão"], state="readonly")
+        else: 
+            entries[key] = ttk.Entry(scrollable_frame)
         entries[key].grid(row=i, column=1, sticky='ew', pady=(0, 8), padx=(10,0))
     scrollable_frame.columnconfigure(1, weight=1)
 
@@ -146,7 +150,16 @@ def create_purchases_tab(parent_frame):
         try:
             with conn.cursor() as cursor:
                 cursor.execute("INSERT INTO compras_detalhadas (nome, cpfcnpj, endereco, cep, bairro, telefone, grupo, nfe, id_produtos, data_compra, preco, forma_pagamento) VALUES (%(nome)s, %(cpfcnpj)s, %(endereco)s, %(cep)s, %(bairro)s, %(telefone)s, %(grupo)s, %(nfe)s, %(id_produtos)s, %(data_compra)s, %(preco)s, %(forma_pagamento)s)", d)
-            conn.commit(); messagebox.showinfo("Sucesso", "Registrado!"); clear_form(); refresh_table()
+            conn.commit()
+            
+            # LÓGICA DE LIMPEZA DE LEADS: Se comprou, não é mais apenas um Lead
+            try:
+                remover_lead_por_telefone(d['telefone'])
+            except Exception as e:
+                print(f"Aviso: Não foi possível remover lead: {e}")
+                
+            messagebox.showinfo("Sucesso", "Registrado com sucesso e lead removido (se existia)!")
+            clear_form(); refresh_table()
         except Exception as e: messagebox.showerror("Erro", str(e))
         finally: conn.close()
 

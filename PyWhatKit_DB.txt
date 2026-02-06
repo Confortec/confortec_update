@@ -112,3 +112,8 @@ Phone Number: +5554997062651
 Image: d:/Users/Usuario/Desktop/CONFORTEC/Imagens App/CURSO-JAN-26/16.png
 Caption: *Olá! Tudo bem?*Vi que você acessou o *Curso de Instalação de Aquecedores a Gás (Digital e Mecânico)*, mas não concluiu a inscrição.Fiquei em dúvida se surgiu alguma pergunta ou se posso te ajudar em algo antes de você decidir.Estou à disposição 👍Atenciosamente,Equipe Confortec📲 @confortec_solucoes | 🌐 confortec.com.br
 --------------------
+Date: 3/2/2026
+Time: 17:24
+Phone Number: +5554997062651
+Message: Teste Segmentaçao
+--------------------

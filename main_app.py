@@ -7,7 +7,7 @@ from functools import partial
 from tkinter import BOTH, HORIZONTAL, LEFT, NONE, X, YES, messagebox, PhotoImage
 
 # --- CONFIGURAÇÃO DA VERSÃO ---
-APP_VERSION = "7.95"  
+APP_VERSION = "8.00"  
 
 # --- DEBUG BLINDADO ---
 def debug_print(msg):

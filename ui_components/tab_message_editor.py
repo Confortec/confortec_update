@@ -3,7 +3,7 @@ from ttkbootstrap.constants import *
 from tkinter import messagebox, filedialog
 from ttkbootstrap.scrolled import ScrolledText
 import pymysql
-from database import get_db_connection
+from database import get_db_connection, obter_grupos_cadastrados
 import threading
 import queue
 import time
@@ -34,12 +34,14 @@ def create_tab(parent_frame):
     form_fields_frame.columnconfigure(1, weight=1)
 
     entries = {}
-    labels_ref = {} # Para alterar textos dinamicamente
+    labels_ref = {} 
+    
+    # BUSCA DINÂMICA DE GRUPOS
+    grupos_dinamicos = obter_grupos_cadastrados()
 
-    # Campos Atualizados com ANIVERSARIO
     campos = [
         ("Tipo de Entidade:", "tipo_entidade", "Combobox", ["LEAD", "COMPRA", "CLIENTE_CAD", "ANIVERSARIO"]), 
-        ("Grupo de Interesse:", "grupo", "Combobox", ["AQUECEDORES", "AQUEC SOLAR", "ENERGIA SOLAR", "CURSOS", "CLIENTES", "OUTROS"]), 
+        ("Grupo de Interesse:", "grupo", "Combobox", grupos_dinamicos), 
         ("Enviar Após (dias):", "dias_apos", "Entry", None), 
         ("Texto da Mensagem:", "texto_mensagem", "ScrolledText", None), 
         ("Caminho da Imagem:", "caminho_imagem", "Entry", None)
@@ -54,13 +56,14 @@ def create_tab(parent_frame):
             entries[key] = ttk.Entry(form_fields_frame)
             if key == "dias_apos": entries[key].insert(0, "0")
         elif widget_type == "Combobox": 
-            entries[key] = ttk.Combobox(form_fields_frame, values=options, state="readonly")
+            # REMOVIDO state="readonly" no grupo para permitir digitação livre
+            st_val = "readonly" if key == "tipo_entidade" else None
+            entries[key] = ttk.Combobox(form_fields_frame, values=options, state=st_val)
         elif widget_type == "ScrolledText": 
             entries[key] = ScrolledText(form_fields_frame, height=4, autohide=True)
             
         entries[key].grid(row=i*2+1, column=0, columnspan=2, sticky='ew')
 
-    # Lógica Visual para Aniversário
     def on_type_change(event):
         tipo = entries['tipo_entidade'].get()
         if tipo == "ANIVERSARIO":
@@ -70,7 +73,6 @@ def create_tab(parent_frame):
             labels_ref['dias_apos'].config(text="Enviar Após (dias):")
     entries['tipo_entidade'].bind("<<ComboboxSelected>>", on_type_change)
 
-    # Botão Imagem Regra
     def select_rule_image():
         filepath = filedialog.askopenfilename(title="Selecionar Imagem", filetypes=[("Imagens", "*.png *.jpg *.jpeg")])
         if filepath:
@@ -79,10 +81,9 @@ def create_tab(parent_frame):
     
     ttk.Button(form_fields_frame, text="📁", command=select_rule_image, bootstyle="secondary-outline", width=4).grid(row=9, column=1, sticky='e')
 
-    # Botões de Ação da Regra
     action_frame = ttk.Frame(form_fields_frame)
     action_frame.grid(row=10, column=0, columnspan=2, sticky='ew', pady=10)
-    action_frame.columnconfigure((0,1,2), weight=1)
+    action_frame.columnconfigure((0,1,2,3), weight=1) # Adicionada coluna para o Refresh
     
     save_button = ttk.Button(action_frame, text="💾 Salvar", bootstyle="success")
     save_button.grid(row=0, column=0, sticky='ew', padx=2)
@@ -91,7 +92,7 @@ def create_tab(parent_frame):
     clear_button = ttk.Button(action_frame, text="✨ Limpar", bootstyle="secondary")
     clear_button.grid(row=0, column=2, sticky='ew', padx=2)
 
-    # 2. CARD: Broadcast (O Código Original Restaurado)
+    # 2. CARD: Broadcast
     broadcast_card = ttk.LabelFrame(form_pane, text=" Envio em Massa (Broadcast) ", padding=10, bootstyle="warning")
     broadcast_card.pack(fill=X, expand=NO, padx=(0, 10), pady=10)
     
@@ -101,14 +102,16 @@ def create_tab(parent_frame):
 
     ttk.Label(broadcast_frame, text="Público Alvo:", font=("Segoe UI", 9, "bold")).grid(row=0, column=0, columnspan=2, sticky='w')
 
-    # Opções Inteligentes de Grupo
-    grupos_base = ["AQUECEDORES", "AQUEC SOLAR", "ENERGIA SOLAR", "CURSOS", "CLIENTES", "OUTROS"]
-    opcoes_broadcast = ["TODOS OS CLIENTES (Base Nova)", "TODOS OS LEADS", "TODOS (Geral)"]
-    for g in grupos_base:
-        opcoes_broadcast.append(f"Apenas Clientes - {g}")
-        opcoes_broadcast.append(f"Apenas Leads - {g}")
+    # Lógica de Opções do Broadcast
+    def get_broadcast_options():
+        grupos = obter_grupos_cadastrados()
+        opcoes = ["TODOS OS CLIENTES (Base Nova)", "TODOS OS LEADS", "TODOS (Geral)"]
+        for g in grupos:
+            opcoes.append(f"Apenas Clientes - {g}")
+            opcoes.append(f"Apenas Leads - {g}")
+        return opcoes
 
-    broadcast_group_combo = ttk.Combobox(broadcast_frame, values=opcoes_broadcast, state="readonly")
+    broadcast_group_combo = ttk.Combobox(broadcast_frame, values=get_broadcast_options(), state="readonly")
     broadcast_group_combo.grid(row=1, column=0, columnspan=2, sticky='ew', pady=(0,5))
     
     ttk.Label(broadcast_frame, text="Mensagem do Broadcast:", font=("Segoe UI", 9, "bold")).grid(row=2, column=0, columnspan=2, sticky='w')
@@ -124,7 +127,6 @@ def create_tab(parent_frame):
     
     ttk.Button(broadcast_frame, text="📁", command=select_broadcast_image, bootstyle="secondary-outline", width=4).grid(row=4, column=1, sticky='e', padx=(5,0))
     
-    # Controles do Broadcast
     status_label = ttk.Label(broadcast_frame, text="Status: Aguardando", bootstyle="inverse-secondary")
     status_label.grid(row=6, column=0, columnspan=2, sticky='ew', pady=(10, 2))
     
@@ -144,6 +146,15 @@ def create_tab(parent_frame):
     skip_button = ttk.Button(btn_control_frame, text="⏩ Pular 1", bootstyle="warning", state=DISABLED)
     skip_button.grid(row=0, column=2, sticky='ew', padx=2)
 
+    # Função de Atualização Geral de Grupos (Útil se você cadastrar algo em outra aba e voltar)
+    def refresh_all_groups():
+        novos = obter_grupos_cadastrados()
+        entries['grupo']['values'] = novos
+        broadcast_group_combo['values'] = get_broadcast_options()
+
+    refresh_btn = ttk.Button(action_frame, text="🔄", command=refresh_all_groups, bootstyle="outline-secondary", width=3)
+    refresh_btn.grid(row=0, column=3, sticky='ew', padx=2)
+
     # --- Painel Direito (Tabela de Regras) ---
     table_pane = ttk.Frame(main_pane)
     main_pane.add(table_pane, weight=2)
@@ -159,7 +170,6 @@ def create_tab(parent_frame):
     tree.pack(fill=BOTH, expand=YES)
 
     # --- LÓGICA DO SISTEMA ---
-
     selected_rule_id = None
     
     def refresh_table():
@@ -200,7 +210,7 @@ def create_tab(parent_frame):
                 entries['dias_apos'].delete(0, END); entries['dias_apos'].insert(0, str(data['dias_apos']))
                 entries['caminho_imagem'].delete(0, END); entries['caminho_imagem'].insert(0, data['caminho_imagem'] or "")
                 entries['texto_mensagem'].delete('1.0', END); entries['texto_mensagem'].insert('1.0', data['texto_mensagem'])
-                on_type_change(None) # Atualiza label
+                on_type_change(None)
         finally: conn.close()
 
     def save_rule():
@@ -217,7 +227,7 @@ def create_tab(parent_frame):
                 else:
                     cursor.execute("INSERT INTO automacao_mensagens (tipo_entidade, grupo, dias_apos, texto_mensagem, caminho_imagem) VALUES (%s, %s, %s, %s, %s)",
                                    (d['tipo_entidade'], d['grupo'], d['dias_apos'], d['texto_mensagem'], d['caminho_imagem']))
-            conn.commit(); messagebox.showinfo("Sucesso", "Regra salva!"); clear_form(); refresh_table()
+            conn.commit(); messagebox.showinfo("Sucesso", "Regra salva!"); clear_form(); refresh_table(); refresh_all_groups()
         except Exception as e: messagebox.showerror("Erro", str(e))
         finally: conn.close()
 
@@ -227,7 +237,7 @@ def create_tab(parent_frame):
         conn = get_db_connection()
         try:
             with conn.cursor() as cursor: cursor.execute("DELETE FROM automacao_mensagens WHERE id=%s", (selected_rule_id,))
-            conn.commit(); clear_form(); refresh_table()
+            conn.commit(); clear_form(); refresh_table(); refresh_all_groups()
         finally: conn.close()
 
     # --- LÓGICA DO BROADCAST (WORKER) ---
@@ -235,7 +245,7 @@ def create_tab(parent_frame):
         try:
             while True:
                 total, sent = broadcast_progress_queue.get(timeout=0.1)
-                if total is None: # Sinal de fim
+                if total is None:
                     status_label.config(text="Status: Concluído", bootstyle="success")
                     progress_bar.stop(); progress_bar.config(value=100)
                     start_button.config(state=NORMAL); pause_button.config(state=DISABLED); skip_button.config(state=DISABLED)
@@ -243,7 +253,6 @@ def create_tab(parent_frame):
                 status_label.config(text=f"Enviando... ({sent}/{total})", bootstyle="warning")
                 if total > 0: progress_bar.config(value=(sent/total)*100)
         except queue.Empty: pass
-        
         if broadcast_thread and broadcast_thread.is_alive():
             page_frame.after(100, update_broadcast_ui)
 
@@ -252,14 +261,12 @@ def create_tab(parent_frame):
         grupo = broadcast_group_combo.get()
         msg = broadcast_text.get('1.0', 'end-1c').strip()
         img = broadcast_img_var.get().strip()
-
         if not msg and not img: return
 
         conn = get_db_connection()
         telefones = set()
         try:
             with conn.cursor() as cursor:
-                # Lógica de seleção inteligente
                 if "Apenas Clientes" in grupo:
                     g = grupo.replace("Apenas Clientes - ", "")
                     cursor.execute("SELECT whatsapp FROM clientes WHERE grupo=%s UNION SELECT telefone FROM compras_detalhadas WHERE grupo=%s", (g,g))
@@ -271,7 +278,7 @@ def create_tab(parent_frame):
                 elif "TODOS OS LEADS" in grupo:
                     cursor.execute("SELECT telefone FROM leads")
                 elif "TODOS (Geral)" in grupo:
-                     cursor.execute("SELECT telefone FROM leads UNION SELECT whatsapp FROM clientes UNION SELECT telefone FROM compras_detalhadas")
+                    cursor.execute("SELECT telefone FROM leads UNION SELECT whatsapp FROM clientes UNION SELECT telefone FROM compras_detalhadas")
                 
                 for row in cursor.fetchall():
                     if row[0]: telefones.add(row[0])
@@ -283,20 +290,13 @@ def create_tab(parent_frame):
         
         for i, fone in enumerate(lista, 1):
             if broadcast_stop_event.is_set(): break
-            
-            # Pausa
             if broadcast_pause_event.is_set():
                 status_label.config(text="Status: PAUSADO", bootstyle="info")
                 broadcast_pause_event.wait()
-            
-            # Pular
             if broadcast_skip_event.is_set():
                 broadcast_skip_event.clear()
                 continue
-                
-            # Envia passando o evento de skip para poder cancelar durante a espera
             enviar_mensagem_com_seguranca(fone, msg, img, broadcast_skip_event)
-            
             broadcast_progress_queue.put((total, i))
             time.sleep(1) 
 
@@ -318,7 +318,7 @@ def create_tab(parent_frame):
     def skip_broadcast():
         broadcast_skip_event.set()
 
-    # Bindings
+    # Bindings Finais
     save_button.config(command=save_rule); delete_button.config(command=delete_rule); clear_button.config(command=clear_form)
     tree.bind("<<TreeviewSelect>>", on_rule_select)
     start_button.config(command=start_broadcast); pause_button.config(command=pause_broadcast); skip_button.config(command=skip_broadcast)

@@ -146,6 +146,44 @@ def initialize_database():
     finally:
         if conn: conn.close()
 
+def remover_lead_por_telefone(telefone):
+    """Remove um lead caso ele tenha se tornado um cliente (compra realizada)"""
+    conn = get_db_connection()
+    if not conn: return
+    try:
+        with conn.cursor() as cursor:
+            # Remove o lead que possui o mesmo telefone (limpa caracteres especiais antes)
+            nums = ''.join(filter(str.isdigit, str(telefone)))
+            # Busca leads que terminam com os mesmos números para garantir a remoção
+            cursor.execute("DELETE FROM leads WHERE telefone LIKE %s", (f"%{nums}%",))
+        conn.commit()
+    except Exception as e:
+        print(f"Erro ao remover lead: {e}")
+    finally:
+        conn.close()
+        
+def obter_grupos_cadastrados():
+    conn = get_db_connection()
+    grupos = set()
+    if not conn: return ["OUTROS"]
+    try:
+        with conn.cursor() as cursor:
+            # Coleta grupos de todas as tabelas
+            cursor.execute("SELECT DISTINCT grupo FROM leads")
+            for r in cursor.fetchall(): 
+                if r[0]: grupos.add(r[0])
+            cursor.execute("SELECT DISTINCT grupo FROM compras_detalhadas")
+            for r in cursor.fetchall(): 
+                if r[0]: grupos.add(r[0])
+            cursor.execute("SELECT DISTINCT grupo FROM clientes")
+            for r in cursor.fetchall(): 
+                if r[0]: grupos.add(r[0])
+    except: pass
+    finally: conn.close()
+    
+    lista = sorted(list(grupos))
+    return lista if lista else ["OUTROS"]
+
 # --- FUNÇÕES DE CACHE ---
 def get_cached_product(link):
     conn = get_db_connection()

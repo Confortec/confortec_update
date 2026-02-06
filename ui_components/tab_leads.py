@@ -26,8 +26,10 @@ def create_leads_tab(parent_frame):
     entries['telefone'] = ttk.Entry(form_card)
     entries['telefone'].pack(fill=X, pady=(0, 10))
 
+    # Trecho modificado na função create_leads_tab:
     ttk.Label(form_card, text="Grupo de Interesse:").pack(fill=X, pady=(0, 2), anchor='w')
-    entries['grupo'] = ttk.Combobox(form_card, values=["AQUECEDORES", "AQUEC SOLAR", "ENERGIA SOLAR", "OUTROS", "CURSOS"], state="readonly")
+    # Removido state="readonly"
+    entries['grupo'] = ttk.Combobox(form_card, values=["AQUECEDORES", "AQUEC SOLAR", "ENERGIA SOLAR", "OUTROS", "CURSOS"])
     entries['grupo'].pack(fill=X, pady=(0, 10))
     entries['grupo'].set("OUTROS")
 

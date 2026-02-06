@@ -41,7 +41,7 @@ def create_customers_tab(parent_frame):
     
     # Campo Grupo (NOVO)
     ttk.Label(form_frame, text="Grupo / Categoria:", font=("Calibri", 11)).grid(row=4, column=0, sticky='w', pady=(10, 2))
-    entries['grupo'] = ttk.Combobox(form_frame, values=["CLIENTES", "AQUECEDORES", "AQUEC SOLAR", "ENERGIA SOLAR", "CURSOS", "OUTROS"], state="readonly")
+    entries['grupo'] = ttk.Combobox(form_frame, values=["CLIENTES", "AQUECEDORES", "AQUEC SOLAR", "ENERGIA SOLAR", "CURSOS", "OUTROS"])
     entries['grupo'].grid(row=4, column=1, sticky='ew', pady=(0, 5), padx=(10, 0))
     entries['grupo'].set("CLIENTES") # Padrão
 
