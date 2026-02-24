@@ -35,8 +35,6 @@ def create_tab(parent_frame):
 
     entries = {}
     labels_ref = {} 
-    
-    # BUSCA DINÂMICA DE GRUPOS
     grupos_dinamicos = obter_grupos_cadastrados()
 
     campos = [
@@ -56,7 +54,6 @@ def create_tab(parent_frame):
             entries[key] = ttk.Entry(form_fields_frame)
             if key == "dias_apos": entries[key].insert(0, "0")
         elif widget_type == "Combobox": 
-            # REMOVIDO state="readonly" no grupo para permitir digitação livre
             st_val = "readonly" if key == "tipo_entidade" else None
             entries[key] = ttk.Combobox(form_fields_frame, values=options, state=st_val)
         elif widget_type == "ScrolledText": 
@@ -83,7 +80,7 @@ def create_tab(parent_frame):
 
     action_frame = ttk.Frame(form_fields_frame)
     action_frame.grid(row=10, column=0, columnspan=2, sticky='ew', pady=10)
-    action_frame.columnconfigure((0,1,2,3), weight=1) # Adicionada coluna para o Refresh
+    action_frame.columnconfigure((0,1,2,3), weight=1)
     
     save_button = ttk.Button(action_frame, text="💾 Salvar", bootstyle="success")
     save_button.grid(row=0, column=0, sticky='ew', padx=2)
@@ -92,7 +89,7 @@ def create_tab(parent_frame):
     clear_button = ttk.Button(action_frame, text="✨ Limpar", bootstyle="secondary")
     clear_button.grid(row=0, column=2, sticky='ew', padx=2)
 
-    # 2. CARD: Broadcast
+    # 2. CARD: Broadcast (Atualizado para Múltiplos Grupos)
     broadcast_card = ttk.LabelFrame(form_pane, text=" Envio em Massa (Broadcast) ", padding=10, bootstyle="warning")
     broadcast_card.pack(fill=X, expand=NO, padx=(0, 10), pady=10)
     
@@ -100,19 +97,36 @@ def create_tab(parent_frame):
     broadcast_frame.pack(fill=BOTH, expand=YES)
     broadcast_frame.columnconfigure(0, weight=1)
 
-    ttk.Label(broadcast_frame, text="Público Alvo:", font=("Segoe UI", 9, "bold")).grid(row=0, column=0, columnspan=2, sticky='w')
+    ttk.Label(broadcast_frame, text="Público Alvo (Selecione um ou mais):", font=("Segoe UI", 9, "bold")).grid(row=0, column=0, columnspan=2, sticky='w')
 
-    # Lógica de Opções do Broadcast
-    def get_broadcast_options():
-        grupos = obter_grupos_cadastrados()
-        opcoes = ["TODOS OS CLIENTES (Base Nova)", "TODOS OS LEADS", "TODOS (Geral)"]
-        for g in grupos:
-            opcoes.append(f"Apenas Clientes - {g}")
-            opcoes.append(f"Apenas Leads - {g}")
-        return opcoes
+    # Container para os Checkbuttons dos Grupos
+    groups_scroll = ttk.Frame(broadcast_frame, height=100)
+    groups_scroll.grid(row=1, column=0, columnspan=2, sticky='ew', pady=(0,5))
+    
+    selected_vars = {} # Dicionário para guardar as variáveis dos grupos
 
-    broadcast_group_combo = ttk.Combobox(broadcast_frame, values=get_broadcast_options(), state="readonly")
-    broadcast_group_combo.grid(row=1, column=0, columnspan=2, sticky='ew', pady=(0,5))
+    def carregar_checkbuttons_grupos():
+        for widget in groups_scroll.winfo_children():
+            widget.destroy()
+        selected_vars.clear()
+        
+        # Opções Especiais
+        for especial in ["TODOS OS CLIENTES", "TODOS OS LEADS"]:
+            var = ttk.BooleanVar()
+            cb = ttk.Checkbutton(groups_scroll, text=especial, variable=var, bootstyle="round-toggle")
+            cb.pack(side=TOP, anchor='w', padx=5)
+            selected_vars[especial] = var
+
+        ttk.Separator(groups_scroll, orient=HORIZONTAL).pack(fill=X, pady=5)
+
+        # Grupos Reais do Banco
+        for g in obter_grupos_cadastrados():
+            var = ttk.BooleanVar()
+            cb = ttk.Checkbutton(groups_scroll, text=f"Grupo: {g}", variable=var)
+            cb.pack(side=TOP, anchor='w', padx=5)
+            selected_vars[g] = var
+
+    carregar_checkbuttons_grupos()
     
     ttk.Label(broadcast_frame, text="Mensagem do Broadcast:", font=("Segoe UI", 9, "bold")).grid(row=2, column=0, columnspan=2, sticky='w')
     broadcast_text = ScrolledText(broadcast_frame, height=4, autohide=True)
@@ -146,11 +160,10 @@ def create_tab(parent_frame):
     skip_button = ttk.Button(btn_control_frame, text="⏩ Pular 1", bootstyle="warning", state=DISABLED)
     skip_button.grid(row=0, column=2, sticky='ew', padx=2)
 
-    # Função de Atualização Geral de Grupos (Útil se você cadastrar algo em outra aba e voltar)
     def refresh_all_groups():
         novos = obter_grupos_cadastrados()
         entries['grupo']['values'] = novos
-        broadcast_group_combo['values'] = get_broadcast_options()
+        carregar_checkbuttons_grupos()
 
     refresh_btn = ttk.Button(action_frame, text="🔄", command=refresh_all_groups, bootstyle="outline-secondary", width=3)
     refresh_btn.grid(row=0, column=3, sticky='ew', padx=2)
@@ -258,7 +271,14 @@ def create_tab(parent_frame):
 
     def worker_broadcast():
         broadcast_stop_event.clear(); broadcast_pause_event.clear(); broadcast_skip_event.clear()
-        grupo = broadcast_group_combo.get()
+        
+        # Coleta grupos marcados
+        grupos_selecionados = [nome for nome, var in selected_vars.items() if var.get()]
+        if not grupos_selecionados:
+            messagebox.showwarning("Aviso", "Selecione ao menos um grupo ou categoria.")
+            broadcast_progress_queue.put((None, 0))
+            return
+
         msg = broadcast_text.get('1.0', 'end-1c').strip()
         img = broadcast_img_var.get().strip()
         if not msg and not img: return
@@ -267,21 +287,17 @@ def create_tab(parent_frame):
         telefones = set()
         try:
             with conn.cursor() as cursor:
-                if "Apenas Clientes" in grupo:
-                    g = grupo.replace("Apenas Clientes - ", "")
-                    cursor.execute("SELECT whatsapp FROM clientes WHERE grupo=%s UNION SELECT telefone FROM compras_detalhadas WHERE grupo=%s", (g,g))
-                elif "Apenas Leads" in grupo:
-                    g = grupo.replace("Apenas Leads - ", "")
-                    cursor.execute("SELECT telefone FROM leads WHERE grupo=%s", (g,))
-                elif "TODOS OS CLIENTES" in grupo:
-                    cursor.execute("SELECT whatsapp FROM clientes UNION SELECT telefone FROM compras_detalhadas")
-                elif "TODOS OS LEADS" in grupo:
-                    cursor.execute("SELECT telefone FROM leads")
-                elif "TODOS (Geral)" in grupo:
-                    cursor.execute("SELECT telefone FROM leads UNION SELECT whatsapp FROM clientes UNION SELECT telefone FROM compras_detalhadas")
-                
-                for row in cursor.fetchall():
-                    if row[0]: telefones.add(row[0])
+                for item in grupos_selecionados:
+                    if item == "TODOS OS CLIENTES":
+                        cursor.execute("SELECT whatsapp FROM clientes UNION SELECT telefone FROM compras_detalhadas")
+                    elif item == "TODOS OS LEADS":
+                        cursor.execute("SELECT telefone FROM leads")
+                    else:
+                        # Busca por grupo específico em todas as tabelas
+                        cursor.execute("SELECT whatsapp FROM clientes WHERE grupo=%s UNION SELECT telefone FROM compras_detalhadas WHERE grupo=%s UNION SELECT telefone FROM leads WHERE grupo=%s", (item, item, item))
+                    
+                    for row in cursor.fetchall():
+                        if row[0]: telefones.add(row[0])
         finally: conn.close()
 
         lista = list(telefones)
@@ -301,7 +317,7 @@ def create_tab(parent_frame):
             time.sleep(1) 
 
         broadcast_progress_queue.put((None, total))
-        messagebox.showinfo("Fim", "Broadcast Finalizado.")
+        messagebox.showinfo("Fim", f"Broadcast Finalizado. {total} contatos processados.")
 
     def start_broadcast():
         global broadcast_thread

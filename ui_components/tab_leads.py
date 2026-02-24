@@ -5,6 +5,7 @@ import webbrowser
 from database import get_db_connection
 import pymysql
 from datetime import datetime
+from database import get_db_connection, obter_grupos_cadastrados
 
 def create_leads_tab(parent_frame):
     page_frame = ttk.Frame(parent_frame)
@@ -15,7 +16,7 @@ def create_leads_tab(parent_frame):
     main_pane.add(form_pane, weight=1)
     form_card = ttk.LabelFrame(form_pane, text=" Informações do Lead ", padding=20)
     form_card.pack(fill=BOTH, expand=YES)
-
+    grupos_dinamicos = obter_grupos_cadastrados()
     entries = {}
     
     ttk.Label(form_card, text="Nome:").pack(fill=X, pady=(0, 2), anchor='w')

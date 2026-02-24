@@ -5,9 +5,9 @@ import queue
 import threading
 from functools import partial
 from tkinter import BOTH, HORIZONTAL, LEFT, NONE, X, YES, messagebox, PhotoImage
-
+from ui_components import tab_manual_sender
 # --- CONFIGURAÇÃO DA VERSÃO ---
-APP_VERSION = "8.00"  
+APP_VERSION = "8.20"  
 
 # --- DEBUG BLINDADO ---
 def debug_print(msg):
@@ -35,8 +35,6 @@ try:
     debug_print("Carregando Banco de Dados...")
     from database import initialize_database
     from backup_service import create_backup
-    
-    # --- IMPORTANTE: Importando o Watcher ---
     from data_watcher import watch_database
     
     debug_print("Carregando componentes de UI...")
@@ -49,6 +47,7 @@ try:
     from ui_components import tab_message_editor
     from ui_components import tab_reports
     from ui_components import tab_budgets
+    from ui_components import tab_manual_sender
     
     debug_print(">>> SUCESSO: Todos os módulos foram carregados!")
 
@@ -83,11 +82,10 @@ def create_version_tab(parent):
 class ConfortecApp:
     def __init__(self, root):
         self.root = root
-        # Título Dinâmico
-        self.root.title(f"Confortec Gestão | v{APP_VERSION}")
-        self.root.geometry("1400x850")
 
-        # --- CONFIGURAÇÃO DE TEMAS ---
+        self.root.title(f"Confortec Gestão | v{APP_VERSION}")
+        self.root.geometry("1920x1080")
+
         self.themes = {
             "Claro - Padrão": "litera",
             "Claro - Moderno": "cosmo",
@@ -96,15 +94,13 @@ class ConfortecApp:
         }
         
         self.style = ttk.Style()
-        
-        # Inicializa tabelas
+
         debug_print("Inicializando tabelas do banco...")
         initialize_database()
 
         self.pages = {}
         self.current_page_key = None
         
-        # --- INTEGRAÇÃO DATA WATCHER (COM PROTEÇÃO) ---
         self.update_queue = queue.Queue()
         try:
             self.watcher_thread = threading.Thread(target=watch_database, args=(self.update_queue,), daemon=True)
@@ -129,22 +125,20 @@ class ConfortecApp:
         
 
     def check_updates(self):
-        """Verifica se há mudanças no banco e atualiza a tela atual automaticamente"""
         try:
             while not self.update_queue.empty():
                 msg = self.update_queue.get_nowait()
                 
-                # Regra 1: Atualiza Pendências se houver mudança em clientes/leads/regras
                 if self.current_page_key == 'pending' and msg in ['customers_updated', 'leads_updated', 'rules_updated']:
                     if self.pages['pending']['frame'] and hasattr(self.pages['pending']['frame'], 'refresh_data'):
                          self.pages['pending']['frame'].refresh_data()
                          
-                # Regra 2: Atualiza tabela de Clientes
+
                 if self.current_page_key == 'customers' and msg == 'customers_updated':
                     if hasattr(self.pages['customers']['frame'], 'refresh_table'):
                         self.pages['customers']['frame'].refresh_table()
                 
-                # Regra 3: Atualiza tabela de Leads
+    
                 if self.current_page_key == 'leads' and msg == 'leads_updated':
                     if hasattr(self.pages['leads']['frame'], 'refresh_table'):
                         self.pages['leads']['frame'].refresh_table()
@@ -181,6 +175,8 @@ class ConfortecApp:
 
         if messagebox.askyesno("Sair", "Deseja fazer backup e sair?"):
             create_backup()
+
+        self.logo_image = None
         
         self.root.destroy()
         
@@ -224,6 +220,7 @@ class ConfortecApp:
                 ("automation", "📊", " Dashboard", tab_automation.create_automation_tab),
                 ("customers", "👥", " Clientes", tab_customers.create_customers_tab), 
                 ("pending", "🔔", " Pendências", tab_pending_messages.create_pending_tab),
+                ("manual_sender", "🖐️", " Envio Manual", tab_manual_sender.create_manual_sender_tab),
             ],
             "VENDAS": [
                 ("purchases", "💲", " Compras", tab_purchases.create_purchases_tab),
@@ -234,7 +231,6 @@ class ConfortecApp:
                 ("products", "📦", " Produtos", tab_products.create_products_tab),
                 ("reports", "📈", " Relatórios", tab_reports.create_reports_tab),
                 ("editor", "✉️", " Editor Msg", tab_message_editor.create_tab),
-                # ABA DE VERSÃO (AUTOMÁTICA)
                 ("version", "🚀", f" Versão {APP_VERSION}", create_version_tab)
             ]
         }
